@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
-from random import random,randint,choice
+from random import random,randint,choice,uniform
 
 #"Model G(n,p)"
 def gnp(n,p):
@@ -20,22 +20,6 @@ def check(graf,kolorowanie):
             if (graf[i][j]==1 and kolorowanie[i]==kolorowanie[j]):
                 bledy+=1
     return bledy
-
-def greedyColoring(graf):
-    n=len(graf)
-    kolorowanie=[None for _ in range(n)]
-    kolorowanie[0]=1
-    for i in range(1,n):
-        for k in range(1,n+1):
-            dobry=True
-            for j in range(0,i+1):
-                if(graf[i][j] and kolorowanie[j]==k):
-                    dobry=False
-                    break
-            if(dobry):
-                kolorowanie[i]=k
-                break
-    return kolorowanie
 
 def printM(matrix):
     print(np.array(matrix))
@@ -79,7 +63,7 @@ def replace(populacja,children):
         j+=1
 
 def mutacja(chromosom,prob):
-    if prob > random.uniform(0.0,1.0):
+    if prob > uniform(0.0,1.0):
         point=randint(0,len(chromosom)-1)
         mut=choice([i for i in range(1,len(chromosom)+1) if i!=chromosom[point]])
         chromosom[point]=mut
@@ -89,28 +73,29 @@ def mutuj_populacje(populacja,prob):
         mutacja(populacja[i],prob)
 
 def algorytm_genetyczny(graf,n):
-    pop_size=4
+    pop_size=100
+    prob_mut=0.75
     Populacja=inicjalizacjaPopulacji(pop_size,n)
-    printM(Populacja)
-    t=5
+    najlepszy_chromosom=[i for i in range(1,n+1)]
+    min_liczba_kolorow=len(set(najlepszy_chromosom))+1000000000000000
+    t=10000
     while(t):
         t-=1
-        Populacja=sorted(Populacja,key=lambda x: funkcja_oceny(x))
-        printM(Populacja)
+        Populacja=sorted(Populacja,key=lambda x:funkcja_oceny(x))
         children=mating(selekcja_top5(Populacja))
-        replace(populacja,children)
-
-n=7
+        replace(Populacja,children)
+        mutuj_populacje(Populacja,prob_mut)
+        
+        for i in range(20):
+            liczba_kolorow=len(set(Populacja[i]))
+            if liczba_kolorow<=min_liczba_kolorow and check(graf,Populacja[i])==0:
+                min_liczba_kolorow=liczba_kolorow
+                najlepszy_chromosom=Populacja[i]
+    return najlepszy_chromosom
+n=15
 p=0.5
 graf=gnp(n,p)
-#algorytm_genetyczny(graf,n)
-a=[[1,2,3,4],
-  [5,6,7,8],
-  [9,10,11,12],
-  ["a","b","c","d"],
-  ["e","f","g","h"],
-  ["x","x","x","x"]]
-for i in range(25):
-    chromosom=[8,8,8,8,8]
-    chromosom[point]=mut
-    printM(chromosom)
+nc=algorytm_genetyczny(graf,n)
+print("SOL: ")
+printM(nc)
+
