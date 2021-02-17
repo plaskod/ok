@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
 import numpy as np
-from random import random,randint,choice,uniform,shuffle
+from random import random,randint,choice,uniform,shuffle,randrange
 from operator import itemgetter
+from collections import deque
 
 ################################################################################################################################
 
@@ -105,15 +106,15 @@ def inicjalizacjaPopulacji(pop_size, n,graf,best_osobnik):
 def check2(graf,chromosom):
     kolorowanie = chromosom[0]
     n=len(kolorowanie)
-    ilosc_blednych_krawedzi = 0
+    liczba_blednych_krawedzi = 0
     indeksy_bledow = [0]*len(graf)
     for i in range(n):
         for j in range(i+1,n):
             if (graf[i][j]==1 and kolorowanie[i]==kolorowanie[j]):
-                ilosc_blednych_krawedzi+=1
+                liczba_blednych_krawedzi+=1
                 indeksy_bledow[i] = 1
                 indeksy_bledow[j] = 1
-    return ilosc_blednych_krawedzi,indeksy_bledow
+    return liczba_blednych_krawedzi,indeksy_bledow
 
 
 ##################################################################################################################################################
@@ -136,8 +137,8 @@ def funkcja_oceny(chromosom,graf,best_osobnik):
     k=len(set(kolorowanie))
     chromosom[1]=q + d + k
     chromosom[2]=w
-    """
     
+    """
     if(ilosc_bledow==0):
         aktualna_min_liczba_kol = len(set(best_osobnik[0]))
         if(liczba_kolorow < aktualna_min_liczba_kol):
@@ -157,11 +158,11 @@ def selekcja_top5(populacja,graf,best_osobnik):
     pop_tmp = populacja.copy()
     najlepsi = []
     #najlepszy = pop_tmp[0]
-    for _ in range(5): #round(len(populacja)/40
+    for _ in range(10): #round(len(populacja)/40
         tmp = min(pop_tmp,key=itemgetter(1))
         pop_tmp.remove(tmp)
         najlepsi.append(tmp)
-    return matingGPX(najlepsi,graf,best_osobnik)
+    return matingCEX(najlepsi,graf,best_osobnik)
 
 
 def crossover(parent1,parent2,graf,best_osobnik):
@@ -239,7 +240,7 @@ def GPX(parent1,parent2,graf,best_osobnik):
     i=1
     parent1_partition=color2partition(parent1)
     parent2_partition=color2partition(parent2)
-    while(i<=k or any(part!=[] for part in parent1_partition) or any(part!=[] for part in parent2_partition)):
+    while(i<=k): #or any(part!=[] for part in parent1_partition) or any(part!=[] for part in parent2_partition)
         if(i%2==0):
             if(any(part!=[] for part in parent1_partition)):
                 biggest_block= max((part for part in parent1_partition if part!=[]), key=len)
@@ -316,7 +317,7 @@ def RoulleteWheelSelection(Populacja,best_osobnik):
 
 def dobor_ruletkowy(Populacja,best_osobnik,graf):
     rodzice=[]
-    for _ in range(10):
+    for _ in range(20):
         rodzic=RoulleteWheelSelection(Populacja,best_osobnik)
         rodzice.append(rodzic)
     return matingCEX(rodzice,graf,best_osobnik)
@@ -384,7 +385,7 @@ def SUS(Populacja,best_osobnik):
 
 def tournament(populacja,graf,best_osobnik):
     liczba_rodzicow=10
-    k=10
+    k=5
     rodzice=[]
     POP=populacja.copy()
     while(liczba_rodzicow>0):
@@ -401,7 +402,7 @@ def tournament(populacja,graf,best_osobnik):
 ##################################################################################################################################################
 
 ##################################################################
-######             MUTACJA W LOSOWYM WIERZCHOLKU
+######             REKOMBINACJA POPULACJI
 ##################################################################
 
 def replace(populacja,children):
@@ -417,6 +418,26 @@ def new_replace(populacja,children):
         ind=populacja.index(max(populacja,key=itemgetter(1)))
         populacja[ind] = c
     return populacja
+
+def comma_selection(populacja,pop_size,children,best_osobnik,graf):
+    old_populacja=populacja.copy()
+    new_populacja=[]
+    population_size=pop_size
+    for c in children:
+        new_populacja.append(c)
+    population_size-=len(children)
+    for i in range(5):
+        new_populacja.append(best_osobnik)
+        population_size -= 1 
+    while(population_size>0):
+        wybrancy= tournament(old_populacja,graf,best_osobnik)
+        for w in wybrancy:
+            new_populacja.append(w)
+        population_size -= len(wybrancy)
+        shuffle(new_populacja)
+    return new_populacja
+
+
 ##################################################################################################################################################
 
 
@@ -507,6 +528,126 @@ def mutuj_populacjeFF(populacja,prob,graf):
     for p in populacja:
         FirstFitMutation(p,prob,graf)
 ##################################################################################################################################################
+##################################################################
+######                     TABUCOL
+##################################################################
+
+def checkTABU(graf,kolorowanie):
+    n=len(graf)
+    conflict_count = 0
+    move_candidates = set()
+    for i in range(n):
+        for j in range(i+1,n):
+            if (graf[i][j]>0 and kolorowanie[i]==kolorowanie[j]):
+                conflict_count+=1
+                move_candidates.add(i)
+                move_candidates.add(j)
+    return conflict_count,list(move_candidates)
+
+def tabucol(k,graph,best_osobnik):
+
+    #############################################
+    ####         PARAMETRY TABU SEARCH       ####
+    tabu_size=len(graph)
+    reps=100
+    max_iterations=10000
+    #############################################
+    kolorowanie_best_osobnika=best_osobnik[0]
+
+    #lista mozliwych kolorow do uzycia
+    colors=list(set(best_osobnik[0]))
+    #colors=list(range(k))
+
+    iterations=0
+
+    tabu=deque()
+    aspiration_level=dict()
+    solution=dict()
+    #for i in range(len(graph)):
+        #solution[i]=kolorowanie_best_osobnika[i]
+
+    for i in range(len(graph)):
+        #solution[i]=colors[randrange(0,len(colors))]
+        solution[i]=choice(colors)
+    
+    
+    while iterations < max_iterations:
+        conflict_count , move_candidates = checkTABU(graph, solution)
+        #conflict_count ,_  = checkTABU(graph, solution)
+        move_candidates=[]
+        for i in range(len(graph)):
+            move_candidates.append(i)
+        
+        if conflict_count == 0 : #and len(set(list(solution.values())))==k
+            #znaleziono prawidlowe 
+            break
+        
+        new_solution = None
+        new_conflicts=0
+        for _ in range(reps):
+            node = move_candidates[randrange(0,len(move_candidates))] #Wybierz wierzcholek do zmienienia
+            #node = choice(move_candidates)     #Wybierz wierzcholek do zmienienia  
+            new_color = choice([c for c in colors if c!=solution[node]])
+            """
+            new_color = colors[randrange(0,len(colors)-1)] #inny kolor niz aktualny, if i != solution[node]]
+            if solution[node] == new_color:
+                new_color=colors[-1]
+            """
+            new_solution = solution.copy()
+            new_solution[node] = new_color
+            #new_conflicts, _ = checkTABU(graph, new_solution)
+            for i in range(len(graph)):
+                for j in range(i+1,len(graph)):
+                    if graph[i][j] and new_solution[i]==new_solution[j]:
+                        new_conflicts += 1
+            if new_conflicts < conflict_count: #znaleziono udoskonalenie
+                if new_conflicts <= aspiration_level.setdefault(conflict_count, conflict_count - 1):
+                    aspiration_level[conflict_count]= new_conflicts - 1
+                    if (node,new_color) in tabu:
+                        tabu.remove((node, new_color))
+                        break
+
+                else:
+                    if (node,new_color) in tabu:
+                        #zly ruch
+                        continue
+                break
+
+            tabu.append((node,solution[node]))
+            if len(tabu) > tabu_size: #przepelniona kolejka
+                tabu.popleft()#usun najstarszy ruch
+
+            solution = new_solution
+            iterations += 1
+    
+    if conflict_count != 0:
+        #print("Nie znaleziono")
+        return None
+    else:
+        solution=list(solution.values())
+        [c_num+1 for c_num in solution]
+        #print("Znaleziono kolorowanie: ", len(set(solution)))
+        osobnik=[solution,None,None]
+        funkcja_oceny(osobnik,graph,best_osobnik)
+        #print(len(set(osobnik[0])))
+        return osobnik
+
+def LocalSearch(populacja,graph,best_osobnik):
+    wybraniec = best_osobnik.copy()
+    k=len(set(best_osobnik[0]))-1 #kolorowanie o jeden kolor mniejsze niz aktualny najlepszy osobnik
+    print("Rozpoczynam przeszukiwanie lokalne dla liczby kolorow: ",k)
+    """
+    rodzic= RoulleteWheelSelection(populacja,best_osobnik)
+    child=GPX(best_osobnik,wybraniec,graph,best_osobnik)
+    znaleziony_osobnik=tabucol(k,graph,child)
+    """
+    znaleziony_osobnik=tabucol(k,graph,wybraniec)
+    if(znaleziony_osobnik != None):
+        ind=populacja.index(max(populacja,key=itemgetter(1)))
+        populacja[ind]=znaleziony_osobnik
+        print("Koncze przeszukiwanie - Znalazlem osobnika o kolorowaniu: ", len(set(znaleziony_osobnik[0])))
+    else:
+        print("Koncze przeszukiwanie - Nie nalazlem osobnika o kolorowaniu: ",k)
 
 
 ##################################################################################################################################################
@@ -547,18 +688,23 @@ def algorytm_genetyczny(graf,n):
         #dzieci=dobor_ruletkowy(Populacja,best_osobnik,graf)
         #dzieci=SUS(Populacja,best_osobnik)
         dzieci=tournament(Populacja,graf,best_osobnik)
+         
+
 
         Populacja = new_replace(Populacja,dzieci)
+        #Populacja= comma_selection(Populacja,pop_size,dzieci,best_osobnik,graf)
         best_osobnik = znajdz_najlepszego_osobnika(Populacja,best_osobnik).copy()
         
         #mutuj_populacje(Populacja,prob_mut)
         #mutuj_populacjeSWAP(Populacja,prob_mut,graf)
         mutuj_populacjeFF(Populacja,prob_mut,graf)
+        if(t%10==0):
+            LocalSearch(Populacja,graf,best_osobnik)
     
     return best_osobnik
 ##################################################################################################################################################
 
-graf1_edges, num_of_v, num_of_e = load_graph("myciel7.txt")
+graf1_edges, num_of_v, num_of_e = load_graph("myciel6.txt")
 graf1=edges2matrix(graf1_edges,num_of_v)
 printM(graf1)
 sol=algorytm_genetyczny(graf1,num_of_v)
